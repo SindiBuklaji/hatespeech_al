@@ -43,90 +43,74 @@ pca_embeddings = pca.fit_transform(embeddings)
 
 print(f'PCA-reduced embeddings shape: {pca_embeddings.shape}')
 
+# Train-test split
 X_train, X_test, y_train, y_test = train_test_split(
     pca_embeddings, data['Label'], test_size=0.2, random_state=42, stratify=data['Label']
 )
 
+print("Class distribution before balancing:", y_train.value_counts())
+
+# Balance the dataset using SMOTE
 smote = SMOTE(random_state=42)
 X_train_resampled, y_train_resampled = smote.fit_resample(X_train, y_train)
 
+print("Class distribution after balancing:", y_train_resampled.value_counts())
 
-  # Define a function to perform GridSearchCV and print results
-def perform_grid_search(model, param_grid, X_train, y_train, X_test, y_test, model_name):
-    grid_search = GridSearchCV(model, param_grid, cv=5, scoring='f1', n_jobs=-1)
+# Scale the features
+scaler = StandardScaler()
+X_train_resampled_scaled = scaler.fit_transform(X_train_resampled)
+X_test_scaled = scaler.transform(X_test)
+
+# Function to perform GridSearchCV and print results
+def perform_grid_search(estimator, param_grid, X_train, y_train, X_test, y_test, model_name):
+    grid_search = GridSearchCV(estimator, param_grid, cv=5, n_jobs=-1, scoring='accuracy', verbose=2)
     grid_search.fit(X_train, y_train)
-    
-    # Get the best model from GridSearch
+
+    print(f"Best parameters for {model_name}: ", grid_search.best_params_)
+    print(f"Best cross-validation accuracy for {model_name}: {grid_search.best_score_:.2f}")
+
     best_model = grid_search.best_estimator_
-    print(f"Best parameters for {model_name}: {grid_search.best_params_}")
-    
-    # Evaluate on test data
     y_pred = best_model.predict(X_test)
-    accuracy = accuracy_score(y_test, y_pred)
-    print(f'{model_name} Accuracy: {accuracy}')
-    print(classification_report(y_test, y_pred, zero_division=0))
+    
+    print(f"\n{model_name}")
+    print("Accuracy:", accuracy_score(y_test, y_pred))
+    print("Classification Report:\n", classification_report(y_test, y_pred))
     
 
-logistic_model = LogisticRegression(max_iter=1000)
-logistic_model.fit(X_train_resampled, y_train_resampled)
-
-
-y_pred = logistic_model.predict(X_test)
-
-
-accuracy = accuracy_score(y_test, y_pred)
-print(f'Logistic Regression Accuracy: {accuracy}')
-print(classification_report(y_test, y_pred))
-
-
-# Logistic Regression with GridSearchCV
-logistic_param_grid = {
-    'C': [0.01, 0.1, 1, 10],  # Regularization strength
-    'penalty': ['l1', 'l2'],  # Type of regularization
-    'solver': ['liblinear', 'saga']  # Solver options
+# Define parameter grid for Logistic Regression
+param_grid_log_reg = {
+    'C': [0.1, 1, 10],
+    'solver': ['liblinear'],
+    'max_iter': [100, 200],
+    'class_weight': [None, 'balanced']  # Add class weights to the grid search
 }
 
-perform_grid_search(LogisticRegression(max_iter=1000), logistic_param_grid, 
-                    X_train_resampled, y_train_resampled, X_test, y_test, "Logistic Regression")
+# Perform Grid Search for Logistic Regression
+perform_grid_search(LogisticRegression(), param_grid_log_reg, X_train_resampled_scaled, y_train_resampled, X_test_scaled, y_test, "Logistic Regression")
 
 
-svc_model = SVC(kernel='linear',random_state=42)
-svc_model.fit(X_train_resampled, y_train_resampled)
-
-y_pred=svc_model.predict(X_test)
-accuracy = accuracy_score(y_test, y_pred)
-print(f'SVC Accuracy: {accuracy}')
-print(classification_report(y_test, y_pred))
-
-
-# SVC with GridSearchCV
-svc_param_grid = {
-    'C': [0.01, 0.1, 1, 10],  # Regularization strength
-    'kernel': ['linear', 'rbf'],  # Kernel types
-    'gamma': ['scale', 'auto']  # Kernel coefficient
+# Define parameter grid for SVC
+param_grid_svc = {
+    'C': [0.1, 1, 10],
+    'kernel': ['linear'],
+    'max_iter': [2500, 3000]
 }
 
-perform_grid_search(SVC(random_state=42), svc_param_grid, 
-                    X_train_resampled, y_train_resampled, X_test, y_test, "SVC")
+# Perform Grid Search for SVC
+perform_grid_search(SVC(probability=True), param_grid_svc, X_train_resampled_scaled, y_train_resampled, X_test_scaled, y_test, "Support Vector Classifier")
 
-random_forest=RandomForestClassifier(n_estimators=100, random_state=42, class_weight='balanced')
-random_forest.fit(X_train_resampled, y_train_resampled)
-
-y_pred=random_forest.predict(X_test)
-accuracy = accuracy_score(y_test, y_pred)
-print(f'Random Forest Accuracy: {accuracy}')
-print(classification_report(y_test, y_pred))
-
-rf_param_grid = {
-    'n_estimators': [50, 100, 200],  # Number of trees
-    'max_depth': [None, 10, 20],  # Maximum depth of trees
-    'min_samples_split': [2, 5, 10],  # Minimum number of samples required to split an internal node
-    'class_weight': ['balanced', 'balanced_subsample']  # Handle class imbalance
+# Define parameter grid for Random Forest
+param_grid_rf = {
+    'n_estimators': [50, 100, 200],
+    'max_depth': [None, 10, 20],
+    'min_samples_split': [2, 5, 10],
+    'min_samples_leaf': [1, 2, 4],
+    'bootstrap': [True],
+    'class_weight': ['balanced']  # Helps handle imbalance
 }
 
-perform_grid_search(RandomForestClassifier(random_state=42), rf_param_grid, 
-                    X_train_resampled, y_train_resampled, X_test, y_test, "Random Forest")
-
+# Perform Grid Search for Random Forest
+perform_grid_search(RandomForestClassifier(), param_grid_rf, X_train_resampled_scaled, y_train_resampled, X_test_scaled, y_test, "Random Forest Classifier")
 
 class SimpleCNN(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim):
@@ -170,7 +154,7 @@ criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(cnn_model.parameters(), lr=0.001)
 
 # Training loop
-num_epochs = 30  #change the number of epochs
+num_epochs = 30
 train_losses = []
 test_losses = []
 train_accuracies = []
