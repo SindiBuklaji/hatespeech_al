@@ -97,17 +97,9 @@ print(classification_report(y_test, y_pred_svc))
 
 ### Define the parameter grid for Random Forest
 param_grid_rf = {
-    'n_estimators': [50, 100, 200, 300, 400, 500],
-    'max_depth': [None, 10, 20, 30, 40, 50],
-    'min_samples_split': [2, 5, 10, 15, 20],
-    'min_samples_leaf': [1, 2, 4, 6, 8],
-    'bootstrap': [True, False]
-}
-
-param_grid_rf = {
     'n_estimators': [50, 100, 200, 300],
     'max_depth': [None, 10, 20, 30],
-    'min_samples_split': [2, 5, 10, 20],
+    'min_samples_split': [2, 5, 10. 20],
     'min_samples_leaf': [1, 2, 4, 5],
     'bootstrap': [True, False]
 }
