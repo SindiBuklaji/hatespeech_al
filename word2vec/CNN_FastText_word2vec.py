@@ -1,3 +1,5 @@
+### TESTING PURPOSES 
+
 import numpy as np
 import pandas as pd
 import torch
@@ -11,7 +13,7 @@ from tensorflow.keras.preprocessing.text import Tokenizer
 import io
 import sys
 
-# Custom stdout reconfiguration for UTF-8 encoding support
+# Custom stdout reconfiguration for UTF-8 encoding
 sys.stdout.reconfigure(encoding='utf-8')
 
 # Load pre-trained FastText embeddings for Albanian
@@ -144,7 +146,7 @@ if __name__ == "__main__":
     batch_size = 32
     max_words = 10000
     max_len = 100
-    embedding_dim = 300  # Assuming FastText embeddings of 300 dimensions
+    embedding_dim = 300  # I assume FastText embeddings of 300 dimensions
     num_classes = 1
     epochs = 10
     learning_rate = 0.001
