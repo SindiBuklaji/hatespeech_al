@@ -1,23 +1,19 @@
 import pandas as pd
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.model_selection import GridSearchCV, train_test_split
-from sklearn.linear_model import LogisticRegression
-from sklearn.pipeline import Pipeline
-from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import classification_report, accuracy_score, precision_recall_fscore_support
+from sklearn.metrics import roc_curve, auc
+import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
+from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from imblearn.over_sampling import SMOTE
-import joblib
-
-from skopt import BayesSearchCV
-from skopt.space import Real, Integer
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.model_selection import GridSearchCV
 
 # Load the labeled data
 labeled_data = pd.read_csv("data/merged_labeled_dataset.csv", encoding='utf-8')
 
 # Feature extraction using TF-IDF
-tfidf_vectorizer = TfidfVectorizer(max_features=5000, ngram_range=(1, 4))
+tfidf_vectorizer = TfidfVectorizer(max_features=2000, ngram_range=(1, 2))
 X = tfidf_vectorizer.fit_transform(labeled_data['Comment']).toarray()
 y = labeled_data['Label']
 
@@ -60,9 +56,6 @@ print("Logistic Regression")
 print("Accuracy:", accuracy_score(y_test, y_pred_log_reg))
 print(classification_report(y_test, y_pred_log_reg))
 
-
-
-
 # Define the parameter grid for SVC
 param_grid_svc = {
     'svc__C': [0.1, 1, 10],  # Regularization parameter
@@ -88,9 +81,6 @@ best_svc_model = grid_search_svc.best_estimator_
 y_pred_svc = best_svc_model.predict(X_test)
 print("Support Vector Classifier (SVC)")
 print("Accuracy:", accuracy_score(y_test, y_pred_svc))
-print(classification_report(y_test, y_pred_svc))
-
-
 
 ### Define the parameter grid for Random Forest
 param_grid_rf = {
@@ -138,29 +128,247 @@ bayesian_opt.fit(X_train, y_train)
 print("Best parameters for Random Forest: ", bayesian_opt.best_params_)
 print("Best cross-validation accuracy for Random Forest: {:.2f}".format(bayesian_opt.best_score_))
 
-# Load the unlabeled data
-unlabeled_data = pd.read_csv("youtube_comments.csv", encoding='utf-8')
+# Predict probabilities
+y_pred_prob = grid_search_rf.predict_proba(X_test)
 
-# Feature extraction using the previously fitted TF-IDF vectorizer
-X_unlabeled = tfidf_vectorizer.transform(unlabeled_data['Comment']).toarray()
+# Compute ROC curve and ROC area for class 0 and class 1
+fpr_0, tpr_0, _ = roc_curve(y_test, y_pred_prob[:, 0], pos_label=0)
+fpr_1, tpr_1, _ = roc_curve(y_test, y_pred_prob[:, 1], pos_label=1)
+roc_auc_0 = auc(fpr_0, tpr_0)
+roc_auc_1 = auc(fpr_1, tpr_1)
 
-# Scale the features using the previously fitted scaler
-X_unlabeled_scaled = scaler.transform(X_unlabeled)
+# Plot ROC curves
+plt.figure()
+plt.plot(fpr_0, tpr_0, color='blue', lw=2, label='ROC curve for class 0 (area = %0.2f)' % roc_auc_0)
+plt.plot(fpr_1, tpr_1, color='red', lw=2, label='ROC curve for class 1 (area = %0.2f)' % roc_auc_1)
+plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+plt.xlim([0.0, 1.0])
+plt.ylim([0.0, 1.05])
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('ROC Curve for Random Forest')
+plt.legend(loc="lower right")
+plt.savefig('roc_curve.png', format = 'png')
+plt.show()
 
-# Load the best model (choose the one with the highest accuracy)
-best_model = joblib.load('logistic_regression_model_scaled.pkl')  # Replace with the best model you have found
+# Convert data to PyTorch tensors
+X_train_tensor = torch.tensor(X_train, dtype=torch.float32)
+y_train_tensor = torch.tensor(y_train, dtype=torch.long)
+X_test_tensor = torch.tensor(X_test, dtype=torch.float32)
+y_test_tensor = torch.tensor(y_test, dtype=torch.long)
 
-# Predict labels for the unlabeled data
-predicted_labels = best_model.predict(X_unlabeled_scaled)
+# Create DataLoader for batch processing
+train_dataset = TensorDataset(X_train_tensor, y_train_tensor)
+train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True)
 
-# convert to integers
-predicted_labels = predicted_labels.astype(int)
+test_dataset = TensorDataset(X_test_tensor, y_test_tensor)
+test_loader = DataLoader(test_dataset, batch_size=16, shuffle=False)
 
-# Add predicted labels to the unlabeled data
-unlabeled_data['predicted_label'] = predicted_labels
+# Define a simple CNN model using PyTorch
+class SimpleCNN(nn.Module):
+    def __init__(self, input_dim, hidden_dim, output_dim):
+        super(SimpleCNN, self).__init__()
+        self.conv1 = nn.Conv1d(in_channels=1, out_channels=32, kernel_size=3)
+        self.pool = nn.MaxPool1d(kernel_size=2)
+        self.fc1 = nn.Linear(32 * ((input_dim - 2) // 2), hidden_dim)
+        self.fc2 = nn.Linear(hidden_dim, output_dim)
+        self.relu = nn.ReLU()
 
-# Save the data with predicted labels
-unlabeled_data.to_csv("youtube_comments_with_predictions_logistic_reg.csv", index=False, encoding='utf-8')
+    def forward(self, x):
+        x = x.unsqueeze(1)  # Add channel dimension
+        x = self.pool(self.relu(self.conv1(x)))
+        x = x.view(x.size(0), -1)  # Flatten for fully connected layer
+        x = self.relu(self.fc1(x))
+        x = self.fc2(x)
+        return x
 
-# Display the first few rows to verify
-print(unlabeled_data.head())
+# Define hyperparameters
+input_dim = X_train.shape[1]  # Number of features (2000 from TF-IDF)
+hidden_dim = 64  # Number of hidden units
+output_dim = len(np.unique(y_train))  # Number of classes (binary classification)
+
+# Initialize the model
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+cnn_model = SimpleCNN(input_dim, hidden_dim, output_dim).to(device)
+
+# Define loss function and optimizer
+criterion = nn.CrossEntropyLoss()
+optimizer = optim.Adam(cnn_model.parameters(), lr=0.001)
+
+# Training loop
+num_epochs = 30  # Number of epochs
+train_losses = []
+test_losses = []
+train_accuracies = []
+test_accuracies = []
+
+for epoch in range(num_epochs):
+    cnn_model.train()
+    running_loss = 0.0
+    correct = 0
+    total = 0
+    
+    for X_batch, y_batch in train_loader:
+        X_batch, y_batch = X_batch.to(device), y_batch.to(device)
+        
+        # Zero the parameter gradients
+        optimizer.zero_grad()
+
+        # Forward pass
+        outputs = cnn_model(X_batch)
+        loss = criterion(outputs, y_batch)
+        
+        # Backward pass and optimization
+        loss.backward()
+        optimizer.step()
+
+        running_loss += loss.item()
+        _, predicted = torch.max(outputs.data, 1)
+        total += y_batch.size(0)
+        correct += (predicted == y_batch).sum().item()
+
+    train_loss = running_loss / len(train_loader)
+    train_accuracy = 100 * correct / total
+    train_losses.append(train_loss)
+    train_accuracies.append(train_accuracy)
+    
+    # Validation
+    cnn_model.eval()
+    test_loss = 0.0
+    correct = 0
+    total = 0
+    
+    with torch.no_grad():
+        for X_batch, y_batch in test_loader:
+            X_batch, y_batch = X_batch.to(device), y_batch.to(device)
+            outputs = cnn_model(X_batch)
+            loss = criterion(outputs, y_batch)
+            test_loss += loss.item()
+            _, predicted = torch.max(outputs.data, 1)
+            total += y_batch.size(0)
+            correct += (predicted == y_batch).sum().item()
+
+    test_loss /= len(test_loader)
+    test_accuracy = 100 * correct / total
+    test_losses.append(test_loss)
+    test_accuracies.append(test_accuracy)
+    
+    print(f'Epoch {epoch+1}/{num_epochs}, Train Loss: {train_loss:.4f}, Train Acc: {train_accuracy:.2f}%, Test Loss: {test_loss:.4f}, Test Acc: {test_accuracy:.2f}%')
+
+# Final evaluation
+cnn_model.eval()
+y_pred = []
+with torch.no_grad():
+    for X_batch, _ in test_loader:
+        X_batch = X_batch.to(device)
+        outputs = cnn_model(X_batch)
+        _, predicted = torch.max(outputs.data, 1)
+        y_pred.extend(predicted.cpu().numpy())
+
+print("CNN Model")
+print("Accuracy:", accuracy_score(y_test, y_pred))
+print("Classification Report:\n", classification_report(y_test, y_pred))
+
+# Define an LSTM model using PyTorch
+class LSTMModel(nn.Module):
+    def __init__(self, input_dim, hidden_dim, output_dim, n_layers=1):
+        super(LSTMModel, self).__init__()
+        self.lstm = nn.LSTM(input_size=input_dim, hidden_size=hidden_dim, num_layers=n_layers, batch_first=True)
+        self.fc = nn.Linear(hidden_dim, output_dim)
+        self.relu = nn.ReLU()
+
+    def forward(self, x):
+        h0 = torch.zeros(self.lstm.num_layers, x.size(0), self.lstm.hidden_size).to(x.device)
+        c0 = torch.zeros(self.lstm.num_layers, x.size(0), self.lstm.hidden_size).to(x.device)
+        out, _ = self.lstm(x.unsqueeze(1), (h0, c0))  # Reshape for LSTM
+        out = self.fc(self.relu(out[:, -1, :]))
+        return out
+
+# Define hyperparameters
+input_dim = X_train.shape[1]  # Number of features (2000 from TF-IDF)
+hidden_dim = 64  # Number of hidden units
+output_dim = len(np.unique(y_train))  # Number of classes (binary classification)
+
+# Initialize the model
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+lstm_model = LSTMModel(input_dim, hidden_dim, output_dim).to(device)
+
+# Define loss function and optimizer
+criterion = nn.CrossEntropyLoss()
+optimizer = optim.Adam(lstm_model.parameters(), lr=0.001)
+
+# Training loop
+num_epochs = 30  # Number of epochs
+train_losses = []
+test_losses = []
+train_accuracies = []
+test_accuracies = []
+
+for epoch in range(num_epochs):
+    lstm_model.train()
+    running_loss = 0.0
+    correct = 0
+    total = 0
+    
+    for X_batch, y_batch in train_loader:
+        X_batch, y_batch = X_batch.to(device), y_batch.to(device)
+        
+        # Zero the parameter gradients
+        optimizer.zero_grad()
+
+        # Forward pass
+        outputs = lstm_model(X_batch)
+        loss = criterion(outputs, y_batch)
+        
+        # Backward pass and optimization
+        loss.backward()
+        optimizer.step()
+
+        running_loss += loss.item()
+        _, predicted = torch.max(outputs.data, 1)
+        total += y_batch.size(0)
+        correct += (predicted == y_batch).sum().item()
+
+    train_loss = running_loss / len(train_loader)
+    train_accuracy = 100 * correct / total
+    train_losses.append(train_loss)
+    train_accuracies.append(train_accuracy)
+    
+    # Validation
+    lstm_model.eval()
+    test_loss = 0.0
+    correct = 0
+    total = 0
+    
+    with torch.no_grad():
+        for X_batch, y_batch in test_loader:
+            X_batch, y_batch = X_batch.to(device), y_batch.to(device)
+            outputs = lstm_model(X_batch)
+            loss = criterion(outputs, y_batch)
+            test_loss += loss.item()
+            _, predicted = torch.max(outputs.data, 1)
+            total += y_batch.size(0)
+            correct += (predicted == y_batch).sum().item()
+
+    test_loss /= len(test_loader)
+    test_accuracy = 100 * correct / total
+    test_losses.append(test_loss)
+    test_accuracies.append(test_accuracy)
+    
+    print(f'Epoch {epoch+1}/{num_epochs}, Train Loss: {train_loss:.4f}, Train Acc: {train_accuracy:.2f}%, Test Loss: {test_loss:.4f}, Test Acc: {test_accuracy:.2f}%')
+
+# Final evaluation
+lstm_model.eval()
+y_pred = []
+with torch.no_grad():
+    for X_batch, _ in test_loader:
+        X_batch = X_batch.to(device)
+        outputs = lstm_model(X_batch)
+        _, predicted = torch.max(outputs.data, 1)
+        y_pred.extend(predicted.cpu().numpy())
+
+print("LSTM Model")
+print("Accuracy:", accuracy_score(y_test, y_pred))
+print("Classification Report:\n", classification_report(y_test, y_pred))
+
+
