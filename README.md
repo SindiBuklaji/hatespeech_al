@@ -5,12 +5,11 @@ This repository contains the code and data for the research project aimed at det
 
 ## Table of Contents
 1. [Data Description](#data-description)
-3. [Preprocessing](#preprocessing)
-4. [Models](#models)
-5. [Performance Metrics](#performance-metrics)
-6. [How to Run](#how-to-run)
-7. [Future Work](#future-work)
-8. [Contributors](#contributors)
+2. [Preprocessing](#preprocessing)
+3. [Models](#models)
+4. [Performance Metrics](#performance-metrics)
+5. [Future Work](#future-work)
+6. [Contributors](#contributors)
 
 ## Data Description
 - **Dataset:** The dataset (`merged_labeled_dataset.csv`) contains user comments in the Albanian language, manually annotated with labels indicating whether the comment contains hate speech or not.
@@ -55,5 +54,11 @@ The models were evaluated using various performance metrics:
 
 The best performing model was the Random Forest with Word2Vec embeddings, achieving an accuracy of 92.5% and an F1-score of 93%.
 
-## How to Run
-1. **Clone the repository:** 
+## Future Work
+- **Fine-tuning of Advanced Models:** Further research is needed to fine-tune advanced models like BERT and explore deep learning architectures like BiLSTM for better performance in the Albanian context.
+- **Dataset Expansion:** There is a need for larger and more diverse datasets to improve model generalization and accuracy.
+
+## Contributors
+- **[Sindi Buklaji]** - Student at the Technical University of Munich
+
+Feel free to contribute to the repository for further improvements!
