@@ -22,7 +22,7 @@ The preprocessing steps include:
 1. Removal or stop-words, punctuation, links, mentions, etc. 
 2. Tokenization using the different techniques (BERT Embeddings, TD-IDF, Word2Vec)
 3. PCA is applied to reduce the dimensionality of the BERT embeddings.
-4. SMOTE is sed to balance the dataset by oversampling the minority class.
+4. SMOTE is set to balance the dataset by oversampling the minority class.
 5. Features are scaled using StandardScaler.
 
 The general preprocessing code is available under the `data` directory, while the tokenization is done seperately and can be found specifically in the `bert`, `td-idf` and `word2vec` directories. 
