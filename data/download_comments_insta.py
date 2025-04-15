@@ -2,7 +2,7 @@ import instaloader
 import csv
 L = instaloader.Instaloader()
 
-L.login('sindibuklaj', '26072002Lezha!')
+L.login('sindibuklaj', 'xxx!')
 
 profile = instaloader.Profile.from_username(L.context, 'joqnews')
 
